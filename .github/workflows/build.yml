@@ -1,12 +1,10 @@
 name: Build Telegram Sender Executables
 
-# متى يعمل هذا الإجراء
 on:
   push:
     branches: [ "main" , "master" ]
   pull_request:
     branches: [ "main" , "master" ]
-  # يمكنك أيضاً تفعيل التشغيل اليدوي
   workflow_dispatch:
 
 jobs:
@@ -20,10 +18,10 @@ jobs:
 
     steps:
     - name: Checkout code
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4  # تحديث إلى v4 أيضاً (اختياري لكن مستحسن)
 
     - name: Set up Python ${{ matrix.python-version }}
-      uses: actions/setup-python@v4
+      uses: actions/setup-python@v5 # تحديث إلى v5 (متوافق مع v4)
       with:
         python-version: ${{ matrix.python-version }}
 
@@ -41,8 +39,6 @@ jobs:
           --hidden-import telethon `
           --hidden-import nest_asyncio `
           --hidden-import openpyxl `
-          --hidden-import pandas._libs.tslibs.base `
-          --hidden-import pandas._libs.tslibs.timedeltas `
           telegram_sender.py
 
     - name: Build with PyInstaller (Ubuntu)
@@ -54,20 +50,18 @@ jobs:
           --hidden-import telethon \
           --hidden-import nest_asyncio \
           --hidden-import openpyxl \
-          --hidden-import pandas._libs.tslibs.base \
-          --hidden-import pandas._libs.tslibs.timedeltas \
           telegram_sender.py
 
     - name: Upload Windows executable
       if: matrix.os == 'windows-latest'
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4  # التحديث الأساسي: من v3 إلى v4
       with:
         name: TelegramSender-Windows
         path: dist/TelegramSender_Windows.exe
 
     - name: Upload Ubuntu executable
       if: matrix.os == 'ubuntu-latest'
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4  # التحديث الأساسي: من v3 إلى v4
       with:
         name: TelegramSender-Ubuntu
         path: dist/TelegramSender_Ubuntu
