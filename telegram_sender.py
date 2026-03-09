@@ -13,6 +13,7 @@ from queue import Queue
 import logging
 import webbrowser
 from datetime import datetime
+from PIL import Image, ImageTk  # إضافة مكتبة PIL للتعامل مع الصور
 
 # Apply nest_asyncio
 nest_asyncio.apply()
@@ -25,7 +26,7 @@ class TelegramSenderApp:
     def __init__(self, root):
         self.root = root
         self.root.title("Telegram Bulk Message Sender")
-        self.root.geometry("1000x700")
+        self.root.geometry("1000x750")  # زيادة الارتفاع قليلاً
         
         self.colors = {
             'bg': '#ffffff',
@@ -52,6 +53,10 @@ class TelegramSenderApp:
         self.country_code = tk.StringVar(value="90")
         self.message_template = tk.StringVar()
         self.message_template.set("Hello {name} 👋")
+        
+        # Image variables
+        self.image_path = None
+        self.image_preview = None
         
         # Queue for communication
         self.message_queue = Queue()
@@ -524,6 +529,31 @@ class TelegramSenderApp:
         self.phone_combo = ttk.Combobox(phone_row, textvariable=self.phone_column, state="readonly", width=25)
         self.phone_combo.pack(side=tk.LEFT)
         
+        # Image section - جديد
+        self.create_header(main, "Image Attachment (Optional)", "🖼️")
+        image_frame = tk.Frame(main, bg=self.colors['bg'])
+        image_frame.pack(fill=tk.X, pady=(0, 15))
+        
+        # Buttons for image
+        image_btn_frame = tk.Frame(image_frame, bg=self.colors['bg'])
+        image_btn_frame.pack(fill=tk.X, pady=5)
+        
+        tk.Button(image_btn_frame, text="📷 Choose Image", command=self.choose_image,
+                 bg=self.colors['secondary'], fg=self.colors['primary'],
+                 relief='flat', cursor='hand2', padx=15, pady=5).pack(side=tk.LEFT, padx=(0, 10))
+        
+        tk.Button(image_btn_frame, text="❌ Remove Image", command=self.remove_image,
+                 bg=self.colors['error'], fg='white',
+                 relief='flat', cursor='hand2', padx=15, pady=5).pack(side=tk.LEFT)
+        
+        # Image info and preview
+        self.image_label = tk.Label(image_frame, text="No image selected", 
+                                   fg=self.colors['light_text'], bg=self.colors['bg'])
+        self.image_label.pack(side=tk.LEFT, padx=(0, 10))
+        
+        self.image_preview_label = tk.Label(image_frame, bg=self.colors['bg'], relief='solid', bd=1)
+        self.image_preview_label.pack(side=tk.LEFT, padx=5)
+        
         # Message
         self.create_header(main, "Message", "💬")
         msg = tk.Frame(main, bg=self.colors['bg'])
@@ -587,6 +617,63 @@ class TelegramSenderApp:
         self.log_text.tag_configure('error', foreground=self.colors['error'])
         self.log_text.tag_configure('warning', foreground=self.colors['warning'])
         self.log_text.tag_configure('info', foreground=self.colors['primary'])
+    
+    def choose_image(self):
+        """اختيار صورة للإرفاق"""
+        file_path = filedialog.askopenfilename(
+            title="Choose an image",
+            filetypes=[
+                ("Image files", "*.png *.jpg *.jpeg *.gif *.bmp *.webp"),
+                ("All files", "*.*")
+            ]
+        )
+        
+        if file_path:
+            try:
+                # التحقق من حجم الصورة (الحد الأقصى 10 ميجابايت)
+                file_size = os.path.getsize(file_path) / (1024 * 1024)  # حجم بالميجابايت
+                if file_size > 10:
+                    messagebox.showwarning("Warning", "Image size should be less than 10MB")
+                    return
+                
+                self.image_path = file_path
+                filename = os.path.basename(file_path)
+                self.image_label.config(text=f"✅ {filename} ({file_size:.1f} MB)", 
+                                      fg=self.colors['success'])
+                
+                # عرض صورة مصغرة
+                self.show_image_preview(file_path)
+                
+                self.log(f"🖼️ Image selected: {filename}", 'success')
+                
+            except Exception as e:
+                self.log(f"❌ Error loading image: {str(e)}", 'error')
+                messagebox.showerror("Error", f"Failed to load image:\n{str(e)}")
+    
+    def show_image_preview(self, image_path):
+        """عرض صورة مصغرة"""
+        try:
+            # فتح الصورة وتغيير حجمها
+            pil_image = Image.open(image_path)
+            pil_image.thumbnail((100, 100))  # تغيير الحجم إلى 100x100 كحد أقصى
+            
+            # تحويل إلى صورة Tkinter
+            photo = ImageTk.PhotoImage(pil_image)
+            
+            # تحديث الملصق
+            self.image_preview_label.config(image=photo)
+            self.image_preview_label.image = photo  # الاحتفاظ بمرجع للصورة
+            
+        except Exception as e:
+            self.log(f"❌ Error creating preview: {str(e)}", 'error')
+    
+    def remove_image(self):
+        """إزالة الصورة المحددة"""
+        self.image_path = None
+        self.image_label.config(text="No image selected", fg=self.colors['light_text'])
+        self.image_preview_label.config(image='')
+        self.image_preview_label.image = None
+        self.log("🖼️ Image removed", 'info')
     
     def save_config(self):
         config = {
@@ -709,12 +796,16 @@ class TelegramSenderApp:
         
         preview = tk.Toplevel(self.root)
         preview.title("Preview")
-        preview.geometry("600x400")
+        preview.geometry("600x500")
         
         text = tk.Text(preview, font=('Segoe UI', 10), padx=10, pady=10)
         text.pack(fill=tk.BOTH, expand=True)
         
         template = self.message_text.get('1.0', tk.END).strip()
+        
+        # إضافة معلومات الصورة إذا وجدت
+        if self.image_path:
+            text.insert(tk.END, f"🖼️ Image: {os.path.basename(self.image_path)}\n\n", 'info')
         
         for _, row in self.df.head(5).iterrows():
             name = row[self.name_column.get()]
@@ -724,6 +815,9 @@ class TelegramSenderApp:
             text.insert(tk.END, f"To: {name}\nPhone: {phone}\nMessage: {msg}\n{'-'*40}\n\n")
         
         text.config(state=tk.DISABLED)
+        
+        # تكوين العلامات
+        text.tag_configure('info', foreground=self.colors['primary'], font=('Segoe UI', 10, 'bold'))
         
         tk.Button(preview, text="Close", command=preview.destroy).pack(pady=5)
     
@@ -751,9 +845,21 @@ class TelegramSenderApp:
         try:
             clean = '+' + re.sub(r'\D', '', phone)
             entity = await self.client.get_input_entity(clean)
-            await self.client.send_message(entity, message)
-            self.log(f"✅ ({idx}/{total}) Sent to {name}", 'success')
+            
+            # إرسال الصورة إذا وجدت
+            if self.image_path and os.path.exists(self.image_path):
+                await self.client.send_file(entity, self.image_path, caption=message)
+                self.log(f"✅ ({idx}/{total}) Sent to {name} (with image)", 'success')
+            else:
+                await self.client.send_message(entity, message)
+                self.log(f"✅ ({idx}/{total}) Sent to {name}", 'success')
+            
             return True
+        except FloodWaitError as e:
+            self.log(f"⏳ ({idx}/{total}) Rate limited. Wait {e.seconds}s", 'warning')
+            await asyncio.sleep(e.seconds)
+            # محاولة مرة أخرى بعد الانتظار
+            return await self.send_message(phone, message, name, idx, total)
         except Exception as e:
             self.log(f"❌ ({idx}/{total}) Failed: {str(e)}", 'error')
             return False
@@ -776,12 +882,17 @@ class TelegramSenderApp:
             else:
                 failed += 1
             
-            self.message_queue.put({'type': 'progress', 'value': idx+1})
-            await asyncio.sleep(2)
+            self.message_queue.put({'type': 'progress', 'value': (idx+1) * 100 // total})
+            
+            # تأخير بين الرسائل لتجنب الحظر
+            await asyncio.sleep(3)  # زيادة التأخير قليلاً
         
         self.log(f"📊 Complete: {success} sent, {failed} failed", 'info')
         self.message_queue.put({'type': 'finished', 'text': f"Sent {success} messages"})
         self.is_running = False
+        
+        # إعادة تمكين الأزرار
+        self.message_queue.put({'type': 'enable_send'})
     
     def send_messages(self):
         if not self.client:
@@ -795,8 +906,15 @@ class TelegramSenderApp:
         if self.is_running:
             return
         
-        if messagebox.askyesno("Confirm", f"Send {len(self.df)} messages?"):
+        # تأكيد الإرسال
+        msg_count = len(self.df)
+        confirm_msg = f"Send {msg_count} messages"
+        if self.image_path:
+            confirm_msg += f"\nwith image: {os.path.basename(self.image_path)}"
+        
+        if messagebox.askyesno("Confirm", confirm_msg + "?"):
             self.is_running = True
+            self.send_button.config(state="disabled")
             self.log("🚀 Starting...", 'info')
             asyncio.run_coroutine_threadsafe(self.send_all(), self.loop)
 
